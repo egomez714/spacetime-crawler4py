@@ -22,29 +22,23 @@ def extract_next_links(url, resp):
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
     #checks if the page was recieved
-    if resp.status != 200:
+    if resp.status != 200 or not resp.raw_response:
         return []
-    else:
-        #parses the html content with Beautiful Soup Library 
+    
+    hyperlinks = set() # Use a set to prevent adding the same link twice per page
+    try:
         soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
-        #Empty set to store hyperlinks and remove duplicates
-        hyperlinks = set()
-        #Finds all the anchor tags <a>, that holds the hyperlinks
-        all_links = soup.find_all('a')
-        #Goes through each link found on the page
-        for value in all_links:
-            if value.get('href'):
-                #Gets the URL
-                href = value.get('href')
-                try:
-                    full_url = urljoin(url, href)
-                    #removes the fragmented part
-                    full_url = urldefrag(full_url)[0]
-                    #Adds the URL to the set of hyperlinks
-                    hyperlinks.add(full_url)
-                except Exception:
-                    continue
-    #Converts the set to a list
+        for anchor in soup.find_all('a'):
+            href = anchor.get('href')
+            if href:
+                # Resolve relative links (e.g., '/about') into full URLs
+                full_url = urljoin(url, href)
+                # Requirement: Remove the fragment part of the URL
+                clean_url = urldefrag(full_url)[0]
+                hyperlinks.add(clean_url)
+    except Exception as e:
+        print(f"Error extracting links from {url}: {e}")
+        
     return list(hyperlinks)
 
 def is_valid(url):
@@ -52,59 +46,40 @@ def is_valid(url):
     # If you decide to crawl it, return True; otherwise return False.
     # There are already some conditions that return False.
     try:
+        if not url or len(url) > 300:
+            return False
+
         parsed = urlparse(url)
         if parsed.scheme not in set(["http", "https"]):
             return False
         
-        # stores allowed domains
         allowed_domains = [".ics.uci.edu", ".cs.uci.edu", 
-            ".informatics.uci.edu", ".stat.uci.edu"
-            ]
-        
-        # checks if url is in allowed_domains
+                           ".informatics.uci.edu", ".stat.uci.edu"]
         if not any(parsed.netloc.endswith(d) for d in allowed_domains):
             return False
         
-        if  re.match(
-            r".*\.(css|js|bmp|gif|jpe?g|ico"
-            + r"|png|tiff?|mid|mp2|mp3|mp4"
-            + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
-            + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
-            + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
-            + r"|epub|dll|cnf|tgz|sha1"
-            + r"|thmx|mso|arff|rtf|jar|csv"
-            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower()):
+        if re.match(
+            r".*\.(css|js|bmp|gif|jpe?g|ico|png|tiff?|mid|mp2|mp3|mp4|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
+            + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
+            + r"|epub|dll|cnf|tgz|sha1|thmx|mso|arff|rtf|jar|csv|rm|smil|wmv|swf|wma|zip|rar|gz)$", 
+            parsed.path.lower()):
             return False
         
-        # --- TRAP DETECTION ---
-        # catches repeating directories /abc/abc/abc
-        if re.search(r'(/.+?)\1{2,}',parsed.path):
+        if re.search(r'(/[^/]+)\1{2,}', parsed.path):
             return False
         
-        # checks URL length
-        if len(url) > 200:
+        if len(parsed.path.split('/')) > 10:
             return False
         
-        # checks for infinite filter combinations
-        if url.count("?") > 1 or url.count("&") > 5:
+        if re.search(r'(action|do|rev|format|timeline)=(diff|history|edit|old|revisions|admin|txt|raw)', (parsed.query.lower() + parsed.path.lower())):
             return False
-        
-        
-        # Avoid wiki diff/history/edit pages - low information content
-        if re.search(r'\?.*do=(diff|history|edit|old|view)', parsed.query):
-            return False
-        
-        # Avoid pages with array-like parameters
 
-        if re.search(r'\[\d+\]', parsed.query):
-            return False
-        
-        # Avoid excessive query parameters that indicate wiki traps
-        if url.count("[") >= 2 or url.count("]") >= 2:
+        if any(keyword in url.lower() for keyword in ["calendar", "wp-content", "login"]):
             return False
         
         return True
 
-    except TypeError:
-        print ("TypeError for ", parsed)
-        raise
+    except Exception as e:
+        print(f"Validation error for {url}: {e}")
+        return False
+
