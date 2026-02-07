@@ -1,10 +1,15 @@
 import re
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
+from analytics import record_page
 
 def scraper(url, resp):
+    if resp.status == 200 and resp.raw_response and resp.raw_response.content:
+        record_page(resp.url, resp.raw_response.content)
+
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
+
 
 def extract_next_links(url, resp):
     # Implementation required.
@@ -25,7 +30,7 @@ def extract_next_links(url, resp):
         for value in all_links:
             if value.get('href'):
                 href = value.get('href')
-                full_url = urljoin(url, href)
+                full_url = urljoin(resp.url, href)
                 hyperlinks.add(full_url)
     return list(hyperlinks)
 
@@ -61,7 +66,7 @@ def is_valid(url):
         # --- TRAP DETECTION ---
         # catches repeating directories /abc/abc/abc
         if re.search(r'(/.+?)\1{2,}',parsed.path):
-            return True
+            return False
         
         # checks URL length
         if len(url) > 200:
