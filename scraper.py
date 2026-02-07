@@ -85,6 +85,21 @@ def is_valid(url):
         # checks for infinite filter combinations
         if url.count("?") > 1 or url.count("&") > 5:
             return False
+        
+        
+        # Avoid wiki diff/history/edit pages - low information content
+        if re.search(r'\?.*do=(diff|history|edit|old|view)', parsed.query):
+            return False
+        
+        # Avoid pages with array-like parameters
+
+        if re.search(r'\[\d+\]', parsed.query):
+            return False
+        
+        # Avoid excessive query parameters that indicate wiki traps
+        if url.count("[") >= 2 or url.count("]") >= 2:
+            return False
+        
         return True
 
     except TypeError:
