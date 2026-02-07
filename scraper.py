@@ -36,11 +36,14 @@ def extract_next_links(url, resp):
             if value.get('href'):
                 #Gets the URL
                 href = value.get('href')
-                full_url = urljoin(url, href)
-                #removes the fragmented part
-                full_url = urldefrag(full_url)[0]
-                #Adds the URL to the set of hyperlinks
-                hyperlinks.add(full_url)
+                try:
+                    full_url = urljoin(url, href)
+                    #removes the fragmented part
+                    full_url = urldefrag(full_url)[0]
+                    #Adds the URL to the set of hyperlinks
+                    hyperlinks.add(full_url)
+                except Exception:
+                    continue
     #Converts the set to a list
     return list(hyperlinks)
 
