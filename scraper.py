@@ -1,5 +1,5 @@
 import re
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, urldefrag
 from bs4 import BeautifulSoup
 from analytics import record_page
 
@@ -21,17 +21,27 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
+    #checks if the page was recieved
     if resp.status != 200:
         return []
     else:
+        #parses the html content with Beautiful Soup Library 
         soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
+        #Empty set to store hyperlinks and remove duplicates
         hyperlinks = set()
+        #Finds all the anchor tags <a>, that holds the hyperlinks
         all_links = soup.find_all('a')
+        #Goes through each link found on the page
         for value in all_links:
             if value.get('href'):
+                #Gets the URL
                 href = value.get('href')
-                full_url = urljoin(resp.url, href)
+                full_url = urljoin(url, href)
+                #removes the fragmented part
+                full_url = urldefrag(full_url)[0]
+                #Adds the URL to the set of hyperlinks
                 hyperlinks.add(full_url)
+    #Converts the set to a list
     return list(hyperlinks)
 
 def is_valid(url):
