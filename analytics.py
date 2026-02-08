@@ -1,9 +1,13 @@
-import re
-from collections import Counter, defaultdict
-from urllib.parse import urlparse
-from bs4 import BeautifulSoup
-from tokenizer import tokenize, computeWordFrequencies
+import atexit
+import os
 import tempfile
+from collections import defaultdict
+from typing import Dict, List, Optional, Set, Tuple
+from urllib.parse import urlparse, urldefrag
+
+from bs4 import BeautifulSoup
+
+from tokenizer import tokenize, computeWordFrequencies
 
 # 1) Unique pages
 unique_urls = set()
@@ -18,17 +22,31 @@ global_word_freq = defaultdict(int)
 # 4) Subdomain
 subdomain_pages = defaultdict(set)
 
+# Per-page word counts (for "old style" logging / debugging)
+page_word_count: Dict[str, int] = {}
+
 # Stopwords
-STOPWORDS = set()
-with open("stopwords.txt", "r") as f:
+STOPWORDS: Set[str] = set()
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+_STOPWORDS_PATH = os.path.join(HERE, "stopwords.txt")
+with open(_STOPWORDS_PATH, "r", encoding="utf-8") as f:
     for line in f:
-        STOPWORDS.add(line.strip().lower())
+        w = line.strip().lower()
+        if w:
+            STOPWORDS.add(w)
+
+#Helpers
+
+def _defrag_url(url: str) -> str:
+    """Remove fragment"""
+    return urldefrag(url)[0]
 
 def extract_visible_text(html):
     """
     Remove scripts/styles and return visible text only.
     """
-    soup = BeautifulSoup(html, "lxml")
+    soup = BeautifulSoup(html, "html.parser")
 
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
@@ -39,9 +57,7 @@ def get_subdomain(url):
     """
     Return subdomain if within uci.edu, else None.
     """
-    parsed = urlparse(url)
-    host = parsed.netloc.lower()
-
+    host = urlparse(url).netloc.lower()
     if host.endswith("uci.edu"):
         return host
     return None
@@ -61,80 +77,90 @@ def tokenize_text_via_tempfile(text):
 
 def record_page(url, raw_html):
     """
-    Called once per successfully crawled page (status == 200).
+    Called by scraper once per successfully crawled page (status == 200).
     """
     global longest_page_url, longest_page_word_count
 
-    # enforce uniqueness by URL
+    if not url:
+        return
+
+    url = _defrag_url(url)
+
+    # Uniqueness (per assignment definition)
     if url in unique_urls:
         return
     unique_urls.add(url)
 
-    # extract visible text
+    # Extract visible text and tokenize
     text = extract_visible_text(raw_html)
-
-    # tokenize using PartA
     tokens = tokenize_text_via_tempfile(text)
 
-    # normalize + remove stopwords
-    tokens = [t for t in tokens if t not in STOPWORDS]
+    # Normalize + stopword removal
+    tokens = [t for t in tokens if t and t not in STOPWORDS]
 
-    # low-information page filter
-    if len(tokens) < 50:
-        return
+    # Per-page word count (for longest + debug logs)
+    wc = len(tokens)
+    page_word_count[url] = wc
 
-    # update longest page
-    if len(tokens) > longest_page_word_count:
-        longest_page_word_count = len(tokens)
+    # Longest page
+    if wc > longest_page_word_count:
+        longest_page_word_count = wc
         longest_page_url = url
 
-    # update word frequencies
+    # Global word frequencies
     page_freq = computeWordFrequencies(tokens) or {}
     for w, c in page_freq.items():
         global_word_freq[w] += c
 
-    # update subdomain stats
-    subdomain = get_subdomain(url)
-    if subdomain:
-        subdomain_pages[subdomain].add(url)
+    # Subdomain stats (unique pages per host)
+    sd = get_subdomain(url)
+    if sd:
+        subdomain_pages[sd].add(url)
 
+#Getters
 
-
-def get_unique_page_count():
+def get_unique_page_count() -> int:
     return len(unique_urls)
 
 
-def get_longest_page():
+def get_longest_page() -> Tuple[Optional[str], int]:
     return longest_page_url, longest_page_word_count
 
 
-def get_top_50_words():
-    # sort global_word_freq by count desc
-    items = sorted(global_word_freq.items(), key=lambda x: x[1], reverse=True)
-    return items[:50]
+def get_top_50_words() -> List[Tuple[str, int]]:
+    return sorted(global_word_freq.items(), key=lambda x: x[1], reverse=True)[:50]
 
 
-def get_subdomain_stats():
+def get_subdomain_stats() -> List[Tuple[str, int]]:
     """
     Returns list of (subdomain, count) sorted alphabetically.
+    Count is number of unique pages in that subdomain.
     """
-    return sorted(
-        [(sd, len(pages)) for sd, pages in subdomain_pages.items()],
-        key=lambda x: x[0]
-    )
+    return sorted(((sd, len(pages)) for sd, pages in subdomain_pages.items()), key=lambda x: x[0])
 
-def write_report_files():
-    with open("report_unique_count.txt", "w") as f:
+
+def write_report_files() -> None:
+    """
+    Writes:
+    - report_unique_count.txt
+    - report_longest_page.txt
+    - report_top50.txt
+    - report_subdomains.txt
+    """
+    # Required report outputs
+    with open("report_unique_count.txt", "w", encoding="utf-8") as f:
         f.write(str(get_unique_page_count()) + "\n")
 
     lp_url, lp_words = get_longest_page()
-    with open("report_longest_page.txt", "w") as f:
+    with open("report_longest_page.txt", "w", encoding="utf-8") as f:
         f.write(f"{lp_url}\t{lp_words}\n")
 
-    with open("report_top50.txt", "w") as f:
+    with open("report_top50.txt", "w", encoding="utf-8") as f:
         for w, c in get_top_50_words():
             f.write(f"{w}, {c}\n")
 
-    with open("report_subdomains.txt", "w") as f:
+    with open("report_subdomains.txt", "w", encoding="utf-8") as f:
         for sd, n in get_subdomain_stats():
             f.write(f"{sd}, {n}\n")
+
+atexit.register(write_report_files)

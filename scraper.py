@@ -3,8 +3,10 @@ from urllib.parse import urlparse, urljoin, urldefrag
 from bs4 import BeautifulSoup
 from analytics import record_page
 
+
 def scraper(url, resp):
     if resp.status == 200 and resp.raw_response and resp.raw_response.content:
+        print("CALLING record_page on", resp.url)
         record_page(resp.url, resp.raw_response.content)
 
     links = extract_next_links(url, resp)
@@ -24,15 +26,19 @@ def extract_next_links(url, resp):
     #checks if the page was recieved
     if resp.status != 200 or not resp.raw_response:
         return []
+    if not hasattr(resp, 'raw_response') or not resp.raw_response: return []
+    if not resp.raw_response.content or len(resp.raw_response.content) < 500: return []
+    if len(resp.raw_response.content) > 10000000: return []
     
     hyperlinks = set() # Use a set to prevent adding the same link twice per page
+
     try:
         soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
         for anchor in soup.find_all('a'):
             href = anchor.get('href')
             if href:
                 # Resolve relative links (e.g., '/about') into full URLs
-                full_url = urljoin(url, href)
+                full_url = urljoin(resp.url, href)
                 # Requirement: Remove the fragment part of the URL
                 clean_url = urldefrag(full_url)[0]
                 hyperlinks.add(clean_url)
@@ -52,9 +58,10 @@ def is_valid(url):
         
         allowed_domains = [".ics.uci.edu", ".cs.uci.edu", 
                            ".informatics.uci.edu", ".stat.uci.edu"]
-        if not any(parsed.netloc.endswith(d) for d in allowed_domains):
-            return False
         
+        host = parsed.netloc.lower()
+        if not any(host == d or host.endswith("." + d) for d in allowed_domains):
+            return False
 
         # Added .py, .txt, .sas, .odc, .php, and version control files (.ppsx, .odc)
         if re.match(
@@ -64,8 +71,7 @@ def is_valid(url):
             + r"|py|sas|odc|txt|ppsx|pps|odc|sas|m|h|cpp|c|java)$", 
             parsed.path.lower()):
             return False
-        
-        
+           
         # Blocks infinite commit/tree hashes and repeating folders
         if any(x in parsed.path.lower() for x in ['/commit/', '/tree/', '/blob/', '/raw/', '/src/','/pix/']):
             return False
@@ -83,9 +89,8 @@ def is_valid(url):
         if any(param in full_url_low for param in trap_params):
             return False
 
-        
         # Blocks known trouble spots like infinite calendars and helpdesks
-        if any(keyword in full_url_low for keyword in ["calendar", "wp-content", "login", "helpdesk.ics"]):
+        if any(keyword in full_url_low for keyword in ["calendar", "wp-content", "login", "helpdesk.ics", 'wics', 'ngs', 'grape']):
             return False
         
         return True
