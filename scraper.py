@@ -61,7 +61,8 @@ def is_valid(url):
         if re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico|png|tiff?|mid|mp2|mp3|mp4|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
             + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
-            + r"|epub|dll|cnf|tgz|sha1|thmx|mso|arff|rtf|jar|csv|rm|smil|wmv|swf|wma|zip|rar|gz)$", 
+            + r"|epub|dll|cnf|tgz|sha1|thmx|mso|arff|rtf|jar|csv|rm|smil|wmv|swf|wma|zip|rar|gz)$"
+            + r".*\.(...|sas|odc|txt)$", 
             parsed.path.lower()):
             return False
         
@@ -76,7 +77,8 @@ def is_valid(url):
         
         dynamic_traps = [
             'action', 'do', 'rev', 'format', 'timeline', 'image', 'tab_details', 
-            'tab_files', 'ns', 'share', 'diff', 'view', 'day', 'month', 'year'
+            'tab_files', 'ns', 'share', 'diff', 'view', 'day', 'month', 'year',
+            'C=', 'O=' 
         ]
         if any(param + '=' in url.lower() for param in dynamic_traps):
             return False
