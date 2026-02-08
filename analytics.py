@@ -46,7 +46,7 @@ def extract_visible_text(html):
     """
     Remove scripts/styles and return visible text only.
     """
-    soup = BeautifulSoup(html, "html.parser")
+    soup = BeautifulSoup(html, "html.parser", from_encoding="utf-8")
 
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()

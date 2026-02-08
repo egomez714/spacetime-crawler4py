@@ -60,7 +60,7 @@ def is_valid(url):
                            ".informatics.uci.edu", ".stat.uci.edu"]
         
         host = parsed.netloc.lower()
-        if not any(host == d or host.endswith("." + d) for d in allowed_domains):
+        if not any(host == d.lstrip('.') or host.endswith(d) for d in allowed_domains):
             return False
 
         # Added .py, .txt, .sas, .odc, .php, and version control files (.ppsx, .odc)
