@@ -78,7 +78,7 @@ def is_valid(url):
         dynamic_traps = [
             'action', 'do', 'rev', 'format', 'timeline', 'image', 'tab_details', 
             'tab_files', 'ns', 'share', 'diff', 'view', 'day', 'month', 'year',
-            'C=', 'O=' 
+            'C=', 'O=', 'idx'
         ]
         if any(param + '=' in url.lower() for param in dynamic_traps):
             return False
