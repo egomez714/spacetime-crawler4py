@@ -67,11 +67,11 @@ def is_valid(url):
         
         
         # Blocks infinite commit/tree hashes and repeating folders
-        if any(x in parsed.path.lower() for x in ['/commit/', '/tree/', '/blob/', '/raw/', '/src/']):
+        if any(x in parsed.path.lower() for x in ['/commit/', '/tree/', '/blob/', '/raw/', '/src/','/pix/']):
             return False
         if re.search(r'(/[^/]+)\1{2,}', parsed.path):
             return False
-        if len(parsed.path.split('/')) > 8:
+        if len(parsed.path.split('/')) > 6:
             return False
         # Combined check for query and path to catch shuffled Wiki/Apache params
         trap_params = [
