@@ -71,6 +71,16 @@ def is_valid(url):
         if len(parsed.path.split('/')) > 10:
             return False
         
+        if url.count('?') > 1 or url.count('&') > 4:
+            return False
+        
+        dynamic_traps = [
+            'action', 'do', 'rev', 'format', 'timeline', 'image', 'tab_details', 
+            'tab_files', 'ns', 'share', 'diff', 'view', 'day', 'month', 'year'
+        ]
+        if any(param + '=' in url.lower() for param in dynamic_traps):
+            return False
+
         if re.search(r'(action|do|rev|format|timeline)=(diff|history|edit|old|revisions|admin|txt|raw)', (parsed.query.lower() + parsed.path.lower())):
             return False
 
