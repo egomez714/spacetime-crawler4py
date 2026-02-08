@@ -42,15 +42,12 @@ def extract_next_links(url, resp):
     return list(hyperlinks)
 
 def is_valid(url):
-    # Decide whether to crawl this url or not. 
-    # If you decide to crawl it, return True; otherwise return False.
-    # There are already some conditions that return False.
     try:
         if not url or len(url) > 300:
             return False
 
         parsed = urlparse(url)
-        if parsed.scheme not in set(["http", "https"]):
+        if parsed.scheme not in ["http", "https"]:
             return False
         
         allowed_domains = [".ics.uci.edu", ".cs.uci.edu", 
@@ -58,35 +55,37 @@ def is_valid(url):
         if not any(parsed.netloc.endswith(d) for d in allowed_domains):
             return False
         
+
+        # Added .py, .txt, .sas, .odc, .php, and version control files (.ppsx, .odc)
         if re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico|png|tiff?|mid|mp2|mp3|mp4|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
             + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
             + r"|epub|dll|cnf|tgz|sha1|thmx|mso|arff|rtf|jar|csv|rm|smil|wmv|swf|wma|zip|rar|gz"
-            + r"|py|sas|odc|txt)$", 
+            + r"|py|sas|odc|txt|ppsx|pps|odc|sas|m|h|cpp|c|java)$", 
             parsed.path.lower()):
             return False
         
+        
+        # Blocks infinite commit/tree hashes and repeating folders
+        if any(x in parsed.path.lower() for x in ['/commit/', '/tree/', '/blob/', '/raw/', '/src/']):
+            return False
         if re.search(r'(/[^/]+)\1{2,}', parsed.path):
             return False
-        
-        if len(parsed.path.split('/')) > 10:
+        if len(parsed.path.split('/')) > 8:
             return False
-        
-        if url.count('?') > 1 or url.count('&') > 4:
-            return False
-        
-        dynamic_traps = [
-            'action', 'do', 'rev', 'format', 'timeline', 'image', 'tab_details', 
-            'tab_files', 'ns', 'share', 'diff', 'view', 'day', 'month', 'year',
-            'C=', 'O=', 'idx'
+        # Combined check for query and path to catch shuffled Wiki/Apache params
+        trap_params = [
+            'action=', 'do=', 'rev=', 'format=', 'timeline=', 'image=', 
+            'tab_details=', 'tab_files=', 'ns=', 'share=', 'diff=', 
+            'view=', 'day=', 'month=', 'year=', 'idx=', 'c=', 'o=', 'sort='
         ]
-        if any(param + '=' in url.lower() for param in dynamic_traps):
+        full_url_low = url.lower()
+        if any(param in full_url_low for param in trap_params):
             return False
 
-        if re.search(r'(action|do|rev|format|timeline)=(diff|history|edit|old|revisions|admin|txt|raw)', (parsed.query.lower() + parsed.path.lower())):
-            return False
-
-        if any(keyword in url.lower() for keyword in ["calendar", "wp-content", "login"]):
+        
+        # Blocks known trouble spots like infinite calendars and helpdesks
+        if any(keyword in full_url_low for keyword in ["calendar", "wp-content", "login", "helpdesk.ics"]):
             return False
         
         return True
