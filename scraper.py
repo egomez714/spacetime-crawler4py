@@ -3,6 +3,9 @@ from urllib.parse import urlparse, urljoin, urldefrag
 from bs4 import BeautifulSoup
 from analytics import record_page
 
+ALLOWED_DOMAINS = [".ics.uci.edu", ".cs.uci.edu", 
+                           ".informatics.uci.edu", ".stat.uci.edu"]
+
 
 def scraper(url, resp):
     if resp.status == 200 and resp.raw_response and resp.raw_response.content:
@@ -41,7 +44,9 @@ def extract_next_links(url, resp):
                 full_url = urljoin(resp.url, href)
                 # Requirement: Remove the fragment part of the URL
                 clean_url = urldefrag(full_url)[0]
-                hyperlinks.add(clean_url)
+                parsed = urlparse(clean_url)
+                if parsed.hostname and any(parsed.hostname.endswith(d) for d in ALLOWED_DOMAINS) and full_url not in hyperlinks:
+                    hyperlinks.add(clean_url)
     except Exception as e:
         print(f"Error extracting links from {url}: {e}")
         
@@ -49,18 +54,15 @@ def extract_next_links(url, resp):
 
 def is_valid(url):
     try:
-        if not url or url.strip() in ['-', '#'] or len(url) > 300:
+        if not url  or url.strip() in ['-', '#'] or len(url) > 300:
             return False
 
         parsed = urlparse(url)
         if parsed.scheme not in ["http", "https"]:
             return False
         
-        allowed_domains = [".ics.uci.edu", ".cs.uci.edu", 
-                           ".informatics.uci.edu", ".stat.uci.edu"]
-        
         host = parsed.netloc.lower()
-        if not any(host == d.lstrip('.') or host.endswith(d) for d in allowed_domains):
+        if not any(host == allowed or host.endswith("." + allowed) for allowed in ALLOWED_DOMAINS):
             return False
 
         # Added .py, .txt, .sas, .odc, .php, and version control files (.ppsx, .odc)
@@ -77,6 +79,7 @@ def is_valid(url):
             return False
         if re.search(r'(/[^/]+)\1{2,}', parsed.path):
             return False
+        
         if len(parsed.path.split('/')) > 6:
             return False
         # Combined check for query and path to catch shuffled Wiki/Apache params
@@ -90,7 +93,7 @@ def is_valid(url):
             return False
 
         # Blocks known trouble spots like infinite calendars and helpdesks
-        if any(keyword in full_url_low for keyword in ["calendar", "wp-content", "login", "helpdesk.ics", 'wics', 'ngs', 'grape']):
+        if any(keyword in full_url_low for keyword in ["calendar", "wp-content", "login", "helpdesk.ics", 'wics', 'ngs', 'grape', 'events', 'doku', 'eppstein']):
             return False
         
         return True
@@ -98,5 +101,4 @@ def is_valid(url):
     except Exception as e:
         print(f"Validation error for {url}: {e}")
         return False
-
 
