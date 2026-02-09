@@ -49,7 +49,7 @@ def extract_next_links(url, resp):
 
 def is_valid(url):
     try:
-        if not url or len(url) > 300:
+        if not url or url.strip() in ['-', '#'] or len(url) > 300:
             return False
 
         parsed = urlparse(url)
@@ -98,4 +98,5 @@ def is_valid(url):
     except Exception as e:
         print(f"Validation error for {url}: {e}")
         return False
+
 
