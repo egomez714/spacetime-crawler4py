@@ -91,12 +91,17 @@ def record_page(url, raw_html):
         return
     unique_urls.add(url)
 
+     # Subdomain stats (unique pages per host)
+    sd = get_subdomain(url)
+    if sd:
+        subdomain_pages[sd].add(url)
+    
     # Extract visible text and tokenize
     text = extract_visible_text(raw_html)
     tokens = tokenize_text_via_tempfile(text)
 
     # Normalize + stopword removal
-    tokens = [t for t in tokens if t and t not in STOPWORDS and len(t) > 2]
+    tokens = [t for t in tokens if t.isalpha() and t not in STOPWORDS and len(t) >= 2]
 
     # Per-page word count (for longest + debug logs)
     wc = len(tokens)
@@ -112,10 +117,8 @@ def record_page(url, raw_html):
     for w, c in page_freq.items():
         global_word_freq[w] += c
 
-    # Subdomain stats (unique pages per host)
-    sd = get_subdomain(url)
-    if sd:
-        subdomain_pages[sd].add(url)
+   
+    
 
 #Getters
 
@@ -153,7 +156,6 @@ def write_report_files() -> None:
     # Required report outputs
     with open("report_unique_count.txt", "w", encoding="utf-8") as f:
         f.write(str(get_unique_page_count()) + "\n")
-        f.write(str(get_unique_pages()) + "\n")
 
     lp_url, lp_words = get_longest_page()
     with open("report_longest_page.txt", "w", encoding="utf-8") as f:
