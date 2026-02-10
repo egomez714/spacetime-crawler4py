@@ -12,15 +12,21 @@ ALLOWED_DOMAINS = [".ics.uci.edu", ".cs.uci.edu",
 def scraper(url, resp):
     if resp.status == 200 and resp.raw_response and resp.raw_response.content:
         
-        # RECORD FIRST: So we count the unique URL even if it's too big to parse for links
-        record_page(resp.url, resp.raw_response.content)
+        # It returns False if the word count is < 50.
+        is_high_quality = record_page(resp.url, resp.raw_response.content)
         
-        # Don't extract links from huge files
+        # 2. STOP if content is low quality (Instruction: Avoid low information pages)
+        if not is_high_quality:
+            return []
+            
+        # 3. STOP if the file is massive (Instruction: Avoid very large files)
         if len(resp.raw_response.content) > 1_000_000:
             return []
             
+        # 4. Process links only if the page passed the checks above
         links = extract_next_links(url, resp)
         return [link for link in links if is_valid(link)]
+        
     return []
 
 
@@ -47,12 +53,17 @@ def extract_next_links(url, resp):
         for anchor in soup.find_all('a'):
             href = anchor.get('href')
             if href:
-                # Resolve relative links (e.g., '/about') into full URLs
                 full_url = urljoin(resp.url, href)
-                # Requirement: Remove the fragment part of the URL
                 clean_url = urldefrag(full_url)[0]
+                
+                # Check duplication against clean_url, not full_url
+                if clean_url in hyperlinks:
+                    continue
+
                 parsed = urlparse(clean_url)
-                if parsed.hostname and any(parsed.hostname.endswith(d) for d in ALLOWED_DOMAINS) and full_url not in hyperlinks:
+                
+                # Use hostname to safely handle ports
+                if parsed.hostname and any(parsed.hostname.endswith(d) for d in ALLOWED_DOMAINS):
                     hyperlinks.add(clean_url)
     except Exception as e:
         print(f"Error extracting links from {url}: {e}")
@@ -66,10 +77,11 @@ def is_valid(url):
 
         if not url  or url.strip() in ['-', '#'] or len(url) > 300:
             return False
+        
         full_url_low = url.lower()
         path_low = parsed.path.lower()
         
-        host = parsed.netloc.lower()
+        host = parsed.hostname
         if not any(host == d.strip(".") or host.endswith(d) for d in ALLOWED_DOMAINS):
             return False
         
@@ -163,7 +175,7 @@ def is_valid(url):
         if re.search(r'(/[^/]+)\1{2,}', parsed.path):
             return False
         
-        if len(parsed.path.split('/')) > 6:
+        if len(parsed.path.split('/')) > 10:
             return False
         # Combined check for query and path to catch shuffled Wiki/Apache params
         trap_params = [

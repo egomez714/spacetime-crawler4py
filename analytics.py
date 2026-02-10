@@ -12,6 +12,7 @@ from tokenizer import tokenize, computeWordFrequencies
 # 1) Unique pages
 unique_urls = set()
 
+
 # 2) Longest page
 longest_page_url = None
 longest_page_word_count = 0
@@ -54,12 +55,10 @@ def extract_visible_text(html):
     return soup.get_text(separator=" ")
 
 def get_subdomain(url):
-    """
-    Return subdomain if within uci.edu, else None.
-    """
-    host = urlparse(url).netloc.lower()
-    if host.endswith("uci.edu"):
-        return host
+    # Use hostname to ensure we match ".uci.edu" even if there is a port (e.g., :8080)
+    host = urlparse(url).hostname
+    if host and host.lower().endswith("uci.edu"):
+        return host.lower()
     return None
 
 def tokenize_text_via_tempfile(text):
@@ -82,16 +81,16 @@ def record_page(url, raw_html):
     global longest_page_url, longest_page_word_count
 
     if not url:
-        return
+        return False
 
     url = _defrag_url(url)
 
     # Uniqueness (per assignment definition)
     if url in unique_urls:
-        return
+        return False
     unique_urls.add(url)
 
-     # Subdomain stats (unique pages per host)
+    # Subdomain stats (unique pages per host)
     sd = get_subdomain(url)
     if sd:
         subdomain_pages[sd].add(url)
@@ -102,6 +101,10 @@ def record_page(url, raw_html):
 
     # Normalize + stopword removal
     tokens = [t for t in tokens if t.isalpha() and t not in STOPWORDS and len(t) >= 2]
+    
+    # checks if page is high quality
+    if len(tokens) < 50:
+        return False
 
     # Per-page word count (for longest + debug logs)
     wc = len(tokens)
@@ -117,6 +120,7 @@ def record_page(url, raw_html):
     for w, c in page_freq.items():
         global_word_freq[w] += c
 
+    return True
    
     
 
