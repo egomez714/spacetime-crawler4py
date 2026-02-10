@@ -5,13 +5,23 @@ from analytics import record_page
 
 url_pattern_counts = {}
 
+ALLOWED_DOMAINS = [".ics.uci.edu", ".cs.uci.edu", 
+                           ".informatics.uci.edu", ".stat.uci.edu"]
+
+
 def scraper(url, resp):
     if resp.status == 200 and resp.raw_response and resp.raw_response.content:
+        
+        # RECORD FIRST: So we count the unique URL even if it's too big to parse for links
         record_page(resp.url, resp.raw_response.content)
-    if len(resp.raw_response.content) > 1_000_000:
-        return []
-    links = extract_next_links(url, resp)
-    return [link for link in links if is_valid(link)]
+        
+        # Don't extract links from huge files
+        if len(resp.raw_response.content) > 1_000_000:
+            return []
+            
+        links = extract_next_links(url, resp)
+        return [link for link in links if is_valid(link)]
+    return []
 
 
 def extract_next_links(url, resp):
@@ -25,45 +35,42 @@ def extract_next_links(url, resp):
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
     #checks if the page was recieved
-    if resp.status != 200:
+    if resp.status != 200 or not resp.raw_response:
         return []
-    else:
-        #parses the html content with Beautiful Soup Library 
+    if not hasattr(resp, 'raw_response') or not resp.raw_response: return []
+    if not resp.raw_response.content or len(resp.raw_response.content) < 500: return []
+    
+    hyperlinks = set() # Use a set to prevent adding the same link twice per page
+
+    try:
         soup = BeautifulSoup(resp.raw_response.content, 'html.parser')
-        #Empty set to store hyperlinks and remove duplicates
-        hyperlinks = set()
-        #Finds all the anchor tags <a>, that holds the hyperlinks
-        all_links = soup.find_all('a')
-        #Goes through each link found on the page
-        for value in all_links:
-            if value.get('href'):
-                #Gets the URL
-                href = value.get('href')
-                full_url = urljoin(url, href)
-                #removes the fragmented part
-                full_url = urldefrag(full_url)[0]
-                #Adds the URL to the set of hyperlinks
-                hyperlinks.add(full_url)
-    #Converts the set to a list
+        for anchor in soup.find_all('a'):
+            href = anchor.get('href')
+            if href:
+                # Resolve relative links (e.g., '/about') into full URLs
+                full_url = urljoin(resp.url, href)
+                # Requirement: Remove the fragment part of the URL
+                clean_url = urldefrag(full_url)[0]
+                parsed = urlparse(clean_url)
+                if parsed.hostname and any(parsed.hostname.endswith(d) for d in ALLOWED_DOMAINS) and full_url not in hyperlinks:
+                    hyperlinks.add(clean_url)
+    except Exception as e:
+        print(f"Error extracting links from {url}: {e}")
+        
     return list(hyperlinks)
 
 def is_valid(url):
-    # Decide whether to crawl this url or not. 
-    # If you decide to crawl it, return True; otherwise return False.
-    # There are already some conditions that return False.
-    try:
+    global url_pattern_counts
+    try: 
         parsed = urlparse(url)
-        if parsed.scheme not in set(["http", "https"]):
+
+        if not url  or url.strip() in ['-', '#'] or len(url) > 300:
             return False
         full_url_low = url.lower()
         path_low = parsed.path.lower()
-        # stores allowed domains
-        allowed_domains = [".ics.uci.edu", ".cs.uci.edu", 
-            ".informatics.uci.edu", ".stat.uci.edu"
-            ]
         
-        # checks if url is in allowed_domains
-        if not any(parsed.netloc.endswith(d) for d in allowed_domains):
+        host = parsed.netloc.lower()
+        if not any(host == d.strip(".") or host.endswith(d) for d in ALLOWED_DOMAINS):
             return False
         
         if re.match(
@@ -149,27 +156,30 @@ def is_valid(url):
         if len(path_segments) > 0 and len(path_segments) > len(set(path_segments)) + 3:
             return False
         
-        # Check URL length
-        if len(url) > 200:
+        # Blocks infinite commit/tree hashes and repeating folders
+        if any(x in parsed.path.lower() for x in ['/commit/', '/tree/', '/blob/', '/raw/', '/src/','/pix/']):
+            return False
+        if re.search(r'(/[^/]+)\1{2,}', parsed.path):
             return False
         
-        # checks for infinite filter combinations
-        if url.count("?") > 1 or url.count("&") > 5:
+        if len(parsed.path.split('/')) > 6:
             return False
+        # Combined check for query and path to catch shuffled Wiki/Apache params
+        trap_params = [
+            'action=', 'do=', 'rev=', 'format=', 'timeline=', 'image=', 
+            'tab_details=', 'tab_files=', 'ns=', 'share=', 'diff=', 
+            'view=', 'day=', 'month=', 'year=', 'idx=', 'c=', 'o=', 'sort='
+        ]
         
-        
-        # Avoid wiki diff/history/edit pages - low information content
-        if re.search(r'\?.*do=(diff|history|edit|old|view|revisions)', parsed.query.lower()):
+        if any(param in full_url_low for param in trap_params):
             return False
-        
-        # Avoid pages with array-like parameters
 
-        if re.search(r'\[\d+\]', parsed.query):
+        # Blocks known trouble spots like infinite calendars and helpdesks
+        if any(keyword in parsed.path.lower() for keyword in [
+            "/calendar/", "/wp-content/", "/login", "/events/page/", 
+            "/doku.php", "/~eppstein/pix/"]):
             return False
         
-        # Avoid excessive query parameters that indicate wiki traps
-        if url.count("[") >= 2 or url.count("]") >= 2:
-            return False
         # Track URL patterns to detect traps (removing numbers to find patterns)
         pattern = re.sub(r'\d+', 'N', url)
         url_pattern_counts[pattern] = url_pattern_counts.get(pattern, 0) + 1
@@ -179,6 +189,7 @@ def is_valid(url):
             return False
         return True
 
-    except TypeError:
-        print ("TypeError for ", parsed)
+    except Exception as e:
+        print(f"Validation error for {url}: {e}")
         return False
+
