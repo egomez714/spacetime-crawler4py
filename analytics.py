@@ -96,7 +96,7 @@ def record_page(url, raw_html):
     tokens = tokenize_text_via_tempfile(text)
 
     # Normalize + stopword removal
-    tokens = [t for t in tokens if t and t not in STOPWORDS]
+    tokens = [t for t in tokens if t and t not in STOPWORDS and len(t) > 2]
 
     # Per-page word count (for longest + debug logs)
     wc = len(tokens)
@@ -121,6 +121,9 @@ def record_page(url, raw_html):
 
 def get_unique_page_count() -> int:
     return len(unique_urls)
+
+def get_unique_pages() -> set:
+    return unique_urls
 
 
 def get_longest_page() -> Tuple[Optional[str], int]:
@@ -150,6 +153,7 @@ def write_report_files() -> None:
     # Required report outputs
     with open("report_unique_count.txt", "w", encoding="utf-8") as f:
         f.write(str(get_unique_page_count()) + "\n")
+        f.write(str(get_unique_pages()) + "\n")
 
     lp_url, lp_words = get_longest_page()
     with open("report_longest_page.txt", "w", encoding="utf-8") as f:
